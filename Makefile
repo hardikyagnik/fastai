@@ -171,8 +171,8 @@ test: ## run tests with the default python
 test-fast: ## run tests in parallel (requires pip install pytest-xdist)
 	pytest -n 3
 
-test-full: ## run all tests, including slow ones, print summary
-	pytest --runslow -ra
+test-full: ## run all tests, including slow ones, print summary, update test-registry
+	pytest --runslow -ra --testapireg
 
 test-cpu: ## run tests with the default python and CUDA_VISIBLE_DEVICES=""
 	CUDA_VISIBLE_DEVICES="" python setup.py --quiet test
@@ -182,27 +182,35 @@ tools-update: ## install/update build tools
 	conda install -y conda-verify conda-build anaconda-client
 	pip install -U twine
 
+docs: ## build test_api_db.json and update docs
+	${MAKE} test-full
+	tools/build-docs -f
+
+log_file := release-`date +"%Y-%m-%d-%H-%M-%S"`.log
 release: ## do it all (other than testing)
-	${MAKE} tools-update
-	${MAKE} master-branch-switch
-	${MAKE} sanity-check
-	${MAKE} test
-	${MAKE} bump
-	${MAKE} changes-finalize
-	${MAKE} release-branch-create
-	${MAKE} commit-version
-	${MAKE} master-branch-switch
-	${MAKE} bump-dev
-	${MAKE} changes-dev-cycle
-	${MAKE} commit-dev-cycle-push
-	${MAKE} prev-branch-switch
-	${MAKE} commit-release-push
-	${MAKE} tag-version-push
-	${MAKE} dist
-	${MAKE} upload
-	${MAKE} test-install
-	${MAKE} backport-check
-	${MAKE} master-branch-switch
+	@echo "\n\n*** logging to $(log_file)"
+	( \
+	${MAKE} tools-update; \
+	${MAKE} master-branch-switch; \
+	${MAKE} sanity-check; \
+	${MAKE} test; \
+	${MAKE} bump; \
+	${MAKE} changes-finalize; \
+	${MAKE} release-branch-create; \
+	${MAKE} commit-version; \
+	${MAKE} master-branch-switch; \
+	${MAKE} bump-dev; \
+	${MAKE} changes-dev-cycle; \
+	${MAKE} commit-dev-cycle-push; \
+	${MAKE} prev-branch-switch; \
+	${MAKE} commit-release-push; \
+	${MAKE} tag-version-push; \
+	${MAKE} dist; \
+	${MAKE} upload; \
+	${MAKE} test-install; \
+	${MAKE} backport-check; \
+	${MAKE} master-branch-switch; \
+	) 2>&1 | tee $(log_file)
 
 ##@ git helpers
 
@@ -346,7 +354,7 @@ changes-finalize: ## fix the version and stamp the date
 
 changes-dev-cycle: ## insert new template + version
 	@echo "\n\n*** [$(cur_branch)] Install new template + version in CHANGES.md"
-	perl -0777 -pi -e 's|^(##)|\n\n## $(version) (Work In Progress)\n\n### New:\n\n### Changed:\n\n### Fixed:\n\n\n\n$$1|ms' CHANGES.md
+	perl -0777 -pi -e 's|^(##)|## $(version) (Work In Progress)\n\n### New:\n\n### Changed:\n\n### Fixed:\n\n\n\n$$1|ms' CHANGES.md
 
 
 ##@ Version bumping

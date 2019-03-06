@@ -10,34 +10,75 @@ Note that the top-most release is changes in the unreleased master branch on
 Github. Parentheses after an item show the name or github id of the contributor
 of that change.
 
+## 1.0.47.dev0 (Work In Progress)
 
+### Breaking changes:
 
-
-
-
-
-
-
-
-## 1.0.46.dev0 (Work In Progress)
+- `create_cnn` becomes `cnn_learner`
+- `random_split_by_pct` becomes `split_by_rand_pct`
+- `no_split` becomes `split_none`
 
 ### New:
 
-- `Learner.destroy`: completely free up `learn`, leaving an empty shell (to replace `gc.collect` eye-sore)
-- `Learner.hibernate`: `learn.export` + `learn.destroy` shortcut method
+- `LabelLists.pre_transform`: call transforms on PIL.Image, before converting to float tensor
+- `LabelLists.presize`: standard Imagenet image resizing/cropping using `pre_transform`
+- `compose`: compose a list of functions
+- Added functional `[test]` links to docs.fast.ai
+- `TrackEpochCallback`: Store completed epoch number in `learn.model_dir/name`
+- `rank_distrib`: get rank of distributed process
 
+### Changed:
+
+- Change `flip_lr` to use much faster method
+- In `text_classifier_learner` the outputs of the encoder corresponding to pad indices are ignored in the poolings
+- Default number of OpenMP threads to 2 (previously 4), due to observed performance benefits
+- `purge` now relies on a writable `learn.model_dir`, which can be set to a full writable path in case `learn.path` is not writable (kaggle, et al)
+- In any event of a `Callback` returning a dictionary will update the state of the `CallbackHandler`
+- When creating a custom metric in a `Callback`, instead of storing the result in `self.metric`, you should add it to `last_metrics` using the method above (see https://docs.fast.ai/metrics.html#Creating-your-own-metric).
+
+### Fixed:
+
+- Do nothing if `Image.resize` called with image already at required size
+- Lighting transforms moved to later in pipeline to avoid redundant computation
+
+## 1.0.46 (2019-02-25)
+
+### Breaking change:
+
+- In `CollabDataBunch`, `pct_val` is renamed `valid_pct` for consistency
+- `ImageItemList` becomes `ImageList` for consistency with `TextList` and `TabularList`
+- `load_learner` will fail for exported (pickled) models with error
+  "AttributeError: Can't get attribute 'ImageItemList' on module
+  'fastai.vision.data'". You will need to re-export with version 1.0.46 or use 1.0.44
+
+### New:
+
+- `Learner.destroy`: completely free up `learn`, leaving an empty shell
+- added NVML query support on OSX via `pynvx` in addition to `pynvml` (Windows/Linux)
+- Added `XResNet`, which is ResNet plus tricks from
+  [Bag of Tricks for Image Classification](https://arxiv.org/abs/1812.01187).
+  Note pretrained models not available yet for this architecture.
+- `TextClassificationInterpretation`, which computes intrisic attention to give some interpretation of classification
+  results in text (thanks to herrmann)
+- `add_cyclical_datepart`, which add the dateparts as cosine embeddings in tabular data (thanks to herrmann)
+- `MixedItemList` two mix several kinds of `ItemList` together
 
 ### Changed:
 
 - revamped `Learner.purge` to reclaim more RAM
+- clearer error messages when using the data block API in the wrong order
+- `ItemList.label_from_list` becomes private to avoid confusion
+- `recurse` parameter for `verify_images`
 
 ### Fixed:
 
+- various memory usage improvements
+- `verify_images` fixes channels even if no new size is passed
 
 
-## 1.0.45 (2019-02-13)
+## 1.0.45
 
-wasn't released.
+Not Released
 
 
 ## 1.0.44 (2019-02-13)
@@ -54,7 +95,6 @@ wasn't released.
 - `extensions` are checked with a case-insensitive match.
 
 
-
 ## 1.0.43 (2019-02-11)
 
 ### Breaking change:
@@ -63,8 +103,9 @@ wasn't released.
 
 ### New:
 
-- More models supported by `create_cnn` (densenet121, densenet169, densenet201, densenet161, vgg16_bn, vgg19_bn, alexnet) thanks to PPPW
-- Backward option in `TextClassifierDataBunch` (thanks to tpietruszka)
+- More models supported by `create_cnn` (`densenet121`, `densenet169`,
+  `densenet201`, `densenet161`, `vgg16_bn`, `vgg19_bn`, `alexnet`) thanks to PPPW
+- Backward option in `text_classifier_learner` (thanks to tpietruszka)
 - Automate custom dependency groups installation via extending `distutils`
 - Transformer and TransformerXL architectures
 - Add `val_bs` parameter to all `DataBunch` creation methods

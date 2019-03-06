@@ -5,7 +5,7 @@ __all__ = ['AdaptiveConcatPool2d', 'BCEWithLogitsFlat', 'BCEFlat', 'MSELossFlat'
            'Flatten', 'Lambda', 'PoolFlatten', 'View', 'ResizeBatch', 'bn_drop_lin', 'conv2d', 'conv2d_trans', 'conv_layer',
            'embedding', 'simple_cnn', 'NormType', 'relu', 'batchnorm_2d', 'trunc_normal_', 'PixelShuffle_ICNR', 'icnr',
            'NoopLoss', 'WassersteinLoss', 'SelfAttention', 'SequentialEx', 'MergeLayer', 'res_block', 'sigmoid_range',
-           'SigmoidRange', 'PartialLayer', 'FlattenedLoss', 'BatchNorm1dFlat']
+           'SigmoidRange', 'PartialLayer', 'FlattenedLoss', 'BatchNorm1dFlat', 'LabelSmoothingCrossEntropy']
 
 class Lambda(nn.Module):
     "An easy way to create a pytorch layer for a simple `func`."
@@ -228,6 +228,7 @@ class FlattenedLoss():
     "Same as `func`, but flattens input and target."
     def __init__(self, func, *args, axis:int=-1, floatify:bool=False, is_2d:bool=True, **kwargs):
         self.func,self.axis,self.floatify,self.is_2d = func(*args,**kwargs),axis,floatify,is_2d
+        functools.update_wrapper(self, self.func)
 
     def __repr__(self): return f"FlattenedLoss of {self.func}"
     @property
@@ -297,3 +298,14 @@ class BatchNorm1dFlat(nn.BatchNorm1d):
         x = x.contiguous().view(-1,l)
         return super().forward(x).view(*f,l)
 
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, eps:float=0.1):
+        super().__init__()
+        self.eps = eps
+    
+    def forward(self, output, target):
+        c = output.size()[-1]
+        log_preds = F.log_softmax(output, dim=-1)
+        losses =  -log_preds.sum(dim=-1) * self.eps / (c-1) 
+        losses += (1-self.eps*c/(c-1)) * F.nll_loss(log_preds, target)
+        return losses.mean()
