@@ -1,6 +1,8 @@
 import pytest
 from fastai.gen_doc.doctest import this_tests
 from fastai.basics import *
+from fastai.vision import ImageList
+
 
 def chk(a,b): assert np.array_equal(a,b)
 
@@ -107,6 +109,15 @@ def test_splitdata_datasets():
     assert len(sd.valid)==ratio*n, 'Validation set is right size'
     assert set(list(sd.train.items)+list(sd.valid.items))==set(range(n)), 'All items covered'
 
+def test_filter_by_rand():
+    c1,p,n,seed = list('abc'),0.2,100,759
+    
+    this_tests(ItemList.filter_by_rand)
+    sd1 = ItemList(range(n)).filter_by_rand(p,seed)
+    sd2 = ItemList(range(n)).filter_by_rand(p,seed)
+    assert len(sd1) == len(sd2), 'Identically seeded random data sets are of different sizes'
+    assert (sd1.items == sd2.items).all(), 'Identically seeded random data sets contain different values'
+
 def test_split_subsets():
     this_tests(ItemList.split_subsets)
     sd = ItemList(range(10)).split_subsets(train_size=.1, valid_size=.2).label_const(0)
@@ -130,8 +141,8 @@ def test_regression():
 def test_wrong_order():
     this_tests('na')
     path = untar_data(URLs.MNIST_TINY)
-    with pytest.raises(Exception):
-        src = ImageList.from_folder(path).label_from_folder().split_by_folder()
+    with pytest.raises(Exception, match="Your data isn't split*"):
+        ImageList.from_folder(path).label_from_folder().split_by_folder()
 
 class CustomDataset(Dataset):
     def __init__(self, data_list): self.data = copy(data_list)
@@ -146,3 +157,17 @@ def test_custom_dataset():
 
     # test property fallback
     assert data.loss_func == F.nll_loss
+
+def test_filter_by_folder():
+    this_tests(ItemList.filter_by_folder)
+    items = ["parent/in", "parent/out", "parent/unspecified_means_out"]
+
+    res = ItemList.filter_by_folder(
+        ItemList(items=[Path(p) for p in items], path="parent"),
+        include=["in", "and_in"], exclude=["out", "also_out"])
+    assert res.items == [Path("parent/in")]
+
+    res = ItemList.filter_by_folder(
+        ItemList(items=items),
+        include=["in", "and_in"], exclude=["out", "also_out"])
+    assert res.items == ["parent/in"]

@@ -26,8 +26,13 @@ def test_path_can_be_str_type(path):
 def test_from_folder(path):
     this_tests(ImageDataBunch.from_folder)
     for valid_pct in [None, 0.9]:
-        data = ImageDataBunch.from_folder(path, test='test')
+        data = ImageDataBunch.from_folder(path, test='test', valid_pct=valid_pct)
         mnist_tiny_sanity_test(data)
+        if valid_pct:
+            n_valid = len(data.valid_ds)
+            n_train = len(data.train_ds)
+            n_total = n_valid + n_train
+            assert n_valid == int(n_total * valid_pct)
 
 def test_from_name_re(path):
     this_tests(ImageDataBunch.from_name_re)
@@ -137,7 +142,7 @@ def test_denormalize(path):
     original_x, y = data.one_batch(ds_type=DatasetType.Valid, denorm=False)
     data.normalize()
     normalized_x, y = data.one_batch(ds_type=DatasetType.Valid, denorm=False)
-    denormalized = denormalize(normalized_x, original_x.mean(), original_x.std())
+    denormalized = denormalize(normalized_x, *data.stats)
     assert round(original_x.mean().item(), 3) == round(denormalized.mean().item(), 3)
     assert round(original_x.std().item(), 3) == round(denormalized.std().item(), 3)
 
@@ -163,9 +168,9 @@ def test_download_images():
 responses = try_import('responses')
 @pytest.mark.skipif(not responses, reason="requires the `responses` module")
 def test_trunc_download():
-    this_tests(download_images)
+    this_tests(untar_data)
     url = URLs.COCO_TINY
-    fname = datapath4file(f'{url2name(url)}.tgz')
+    fname = datapath4file(url2name(url)).with_suffix(".tgz")
     # backup user's current state
     fname_bak = fname.parent/f"{fname.name}-bak"
     if fname.exists(): os.rename(fname, fname_bak)

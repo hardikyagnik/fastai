@@ -13,7 +13,7 @@ from nbconvert import HTMLExporter
 from IPython.core import page
 from IPython.core.display import display, Markdown, HTML
 
-__all__ = ['show_test', 'doctest', 'find_dir_tests', 'lookup_db', 'find_test_matches', 'find_test_files', 'direct_test_match', 'fuzzy_test_match', 'get_pytest_html']
+__all__ = ['show_test', 'doctest', 'find_related_tests', 'lookup_db', 'find_test_matches', 'find_test_files', 'fuzzy_test_match', 'get_pytest_html']
 
 TestFunctionMatch = namedtuple('TestFunctionMatch', ['line_number', 'line'])
 
@@ -25,29 +25,22 @@ def show_test(elt)->str:
 def doctest(elt):
     "Inline notebook popup for `show_test`"
     md = build_tests_markdown(elt)
-    output = HTMLExporter().markdown2html(md)
+    output = nbdoc.md2html(md)
     try:    page.page({'text/html': output})
     except: display(Markdown(md))
 
 def build_tests_markdown(elt):
-    db_matches = [get_links(t) for t in lookup_db(elt)]
-    try:
-        direct, related = find_dir_tests(elt)
-        direct = [get_links(t) for t in direct]
-        related = [get_links(t) for t in related]
-        direct = list(set(direct) - set(db_matches))
-        related = list(set(related) - set(db_matches) - set(direct))
-    except OSError as e:
-        #print('Could not find fastai/tests folder. If you installed from conda, please install developer build instead.')
-        direct, related = [], []
-
-    md = ''.join([
-        tests2md(db_matches, ''),
-        tests2md(direct, 'Direct tests:'),
-        tests2md(related, 'Related tests:')
-    ])
     fn_name = nbdoc.fn_name(elt)
-    if len(md)==0: 
+    md = ''
+    db_matches = [get_links(t) for t in lookup_db(elt)]
+    md += tests2md(db_matches, '')
+    try:
+        related = [get_links(t) for t in find_related_tests(elt)]
+        other_tests = [k for k in OrderedDict.fromkeys(related) if k not in db_matches]
+        md += tests2md(other_tests, f'Some other tests where `{fn_name}` is used:')
+    except OSError as e: pass
+
+    if len(md.strip())==0:
         return (f'No tests found for `{fn_name}`.'
                 ' To contribute a test please refer to [this guide](/dev/test.html)'
                 ' and [this discussion](https://forums.fast.ai/t/improving-expanding-functional-tests/32929).')
@@ -56,12 +49,12 @@ def build_tests_markdown(elt):
 
 def tests2md(tests, type_label:str):
     if not tests: return ''
-    md = [f'\n\n{type_label}'] + [f'* `{cmd}` {link}' for link,cmd in tests]
+    md = [f'\n\n{type_label}'] + [f'* `{cmd}` {link}' for link,cmd in sorted(tests, key=lambda k: k[1])]
     return '\n'.join(md)
 
 def get_pytest_html(elt, anchor_id:str)->Tuple[str,str]:
     md = build_tests_markdown(elt)
-    html = HTMLExporter().markdown2html(md).replace('\n','') # nbconverter fails to parse markdown if it has both html and '\n'
+    html = nbdoc.md2html(md).replace('\n','') # nbconverter fails to parse markdown if it has both html and '\n'
     anchor_id = anchor_id.replace('.', '-') + '-pytest'
     link, body = get_pytest_card(html, anchor_id)
     return link, body
@@ -76,27 +69,22 @@ def get_pytest_card(html, anchor_id):
     return link, body
 
 def lookup_db(elt)->List[Dict]:
-    "Finds `this_test` entries from test_api_db.json"
+    "Finds `this_test` entries from test_registry.json"
     db_file = Path(abspath(join(dirname( __file__ ), '..')))/DB_NAME
     if not db_file.exists():
-        raise Error(f'Could not find {db_file}. Please make sure it exists at this location or run `make test`')
-        return []
+        raise Exception(f'Could not find {db_file}. Please make sure it exists at "{db_file}" or run `make test`')
     with open(db_file, 'r') as f:
         db = json.load(f)
     key = get_func_fq_name(elt)
     return db.get(key, [])
 
-def find_dir_tests(elt)->Tuple[List[Dict],List[Dict]]:
+def find_related_tests(elt)->Tuple[List[Dict],List[Dict]]:
     "Searches `fastai/tests` folder for any test functions related to `elt`"
-    test_dir = get_tests_dir(elt)
-    test_files = find_test_files(elt)
-    all_direct_matches = []
-    all_fuzzy_matches = []
-    for test_file in test_files:
-        direct_matches, fuzzy_matches = find_test_matches(elt, test_file)
-        all_direct_matches.extend(direct_matches)
-        all_fuzzy_matches.extend(fuzzy_matches)
-    return all_direct_matches, all_fuzzy_matches
+    related_matches = []
+    for test_file in find_test_files(elt):
+        fuzzy_matches = find_test_matches(elt, test_file)
+        related_matches.extend(fuzzy_matches)
+    return related_matches
 
 def get_tests_dir(elt)->Path:
     "Absolute path of `fastai/tests` directory"
@@ -136,20 +124,7 @@ def find_test_matches(elt, test_file:Path)->Tuple[List[Dict],List[Dict]]:
     lines = get_lines(test_file)
     rel_path = relative_test_path(test_file)
     fn_name = get_qualname(elt) if not inspect.ismodule(elt) else ''
-
-    direct_matches = direct_test_match(fn_name, lines, rel_path)
-    fuzzy_matches = fuzzy_test_match(fn_name, lines, rel_path)
-    return direct_matches, fuzzy_matches
-
-def direct_test_match(fn_name:str, lines:List[Dict], rel_path:str)->List[TestFunctionMatch]:
-    "Any `def test_function_name():` where test name contains function/class name"
-    result = []
-    fn_class,fn_name = separate_comp(fn_name)
-    fn_class = '_'.join(fn_class)
-    for idx,line in enumerate(lines):
-        if re.match(f'\s*def test_\w*({fn_class}_)?{fn_name}\w*\(.*', line):
-            result.append((idx+1,line)) # offset 1 for github
-    return [map_test(rel_path, lno, l) for lno,l in result]
+    return fuzzy_test_match(fn_name, lines, rel_path)
 
 def get_qualname(elt):
     return elt.__qualname__ if hasattr(elt, '__qualname__') else fn_name(elt)

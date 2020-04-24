@@ -3,7 +3,7 @@ from fastai.gen_doc.doctest import this_tests
 from fastai.text import *
 
 def test_rules():
-    this_tests(fix_html, replace_rep, replace_wrep, rm_useless_spaces, spec_add_spaces)
+    this_tests(fix_html, replace_rep, replace_wrep, rm_useless_spaces, spec_add_spaces, replace_all_caps, deal_caps)
     assert fix_html("Some HTML&nbsp;text<br />") == "Some HTML& text\n"
     assert replace_rep("I'm so excited!!!!!!!!") == "I'm so excited xxrep 8 ! "
     assert replace_wrep("I've never ever ever ever ever ever ever ever done this.") == "I've never  xxwrep 7 ever  done this."
@@ -35,3 +35,13 @@ def test_tokenize_ignores_extraneous_space():
     tokenizer = Tokenizer(BaseTokenizer)
     toks = tokenizer.process_all(texts)
     assert toks[0] == ['test']
+
+def test_numericalize_and_textify():
+    toks = [['ok', '!', 'xxmaj', 'nice', '!', 'anti', '-', 'virus'], ['!', 'xxmaj', 'meg', 'xxmaj', 'nice', 'meg']]
+    vocab = Vocab.create(toks, max_vocab=20, min_freq=2)
+    this_tests(vocab.numericalize, vocab.textify)
+    assert vocab.numericalize(toks[0]) == [0, 9, 5, 10, 9, 0, 0, 0]
+    assert vocab.textify([0, 3, 10, 11, 9]) == 'xxunk xxeos nice meg !'
+    print(vocab.stoi)
+    with pytest.raises(IndexError):
+        vocab.textify([16])
